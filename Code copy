@@ -1,0 +1,3499 @@
+
+1
+
+import numpy as np
+
+2
+
+import matplotlib.pyplot as plt
+
+3
+
+import xarray as xr
+
+4
+
+from scipy import stats
+
+5
+
+import cartopy.crs as ccrs
+
+6
+
+import cartopy.feature as cfeature
+
+7
+
+import xesmf as xe
+
+8
+
+from cartopy.mpl.gridliner import LONGITUDE_FORMATTER, LATITUDE_FORMATTER
+
+9
+
+import matplotlib.ticker as mticker
+
+10
+
+import warnings
+
+11
+
+warnings.filterwarnings("ignore")
+
+1
+
+temp_data_xr = xr.open_dataset('/home/ucfarey/DATA/geog0105/' +
+
+2
+
+                               'trace.01-36.22000BP.pop.TEMP.22000BP_decavg_400BCE.nc')
+
+3
+
+​
+
+4
+
+moc_data_xr = xr.open_dataset('/home/ucfarey/DATA/geog0105/' +
+
+5
+
+                               'trace.01-36.22000BP.pop.MOC.22000BP_decavg_400BCE.nc')
+
+6
+
+lons_xr = temp_data_xr.TLONG.values
+
+7
+
+lats_xr = temp_data_xr.TLAT.values
+
+regression
+1
+
+def regress(min_time, max_time, verbose=True):
+
+2
+
+​
+
+3
+
+    moc_array = moc_data_xr.MOC[min_time:max_time, 1, 0, 14:, 73:].max(axis=(1,2)).values
+
+4
+
+    temp_array = temp_data_xr.TEMP[min_time:max_time, 0, :, :].values
+
+5
+
+    #print('shape of moc array: ', moc_array.shape)
+
+6
+
+    #print('shape of temp array: ', temp_array.shape, '\n')
+
+7
+
+​
+
+8
+
+    slopes = np.empty((116, 100))
+
+9
+
+    intercepts = np.empty((116, 100))
+
+10
+
+    rs = np.empty((116, 100))
+
+11
+
+    ps = np.empty((116, 100))
+
+12
+
+    std_errs = np.empty((116, 100))
+
+13
+
+​
+
+14
+
+    for nlat in range(temp_array.shape[1]):
+
+15
+
+        for nlon in range(temp_array.shape[2]):
+
+16
+
+            temp=temp_array[:,nlat,nlon]
+
+17
+
+            moc=moc_array
+
+18
+
+            slope, intercept, r_value, p_value, std_err = stats.linregress(moc,temp)
+
+19
+
+            slopes[nlat,nlon]=slope
+
+20
+
+            intercepts[nlat,nlon]=intercept
+
+21
+
+            rs[nlat,nlon]=r_value
+
+22
+
+            ps[nlat,nlon]=p_value
+
+23
+
+            std_errs[nlat,nlon]=std_err  
+
+24
+
+    
+
+25
+
+    if verbose:
+
+26
+
+        # Convert nan values to numbers for plotting
+
+27
+
+        slopes=np.nan_to_num(slopes)
+
+28
+
+    
+
+29
+
+    return slopes, rs, ps
+
+1
+
+# Regressions for each time periods
+
+2
+
+slopes_all, rs_all, ps_all = regress(0, 2205)
+
+3
+
+slopes_YD, rs_YD, ps_YD = regress(900, 1150)
+
+4
+
+slopes_BA, rs_BA, ps_BA = regress(700, 1000)
+
+5
+
+slopes_OD, rs_OD, ps_OD = regress(0, 700)
+
+6
+
+slopes_8, rs_8, ps_8 = regress(1300, 1500)
+
+7
+
+slopes_H1, rs_H1, ps_H1 = regress(400, 700)
+
+8
+
+slopes_H0, rs_H0, ps_H0 = regress(900, 1200)
+
+9
+
+slopes_LGIT, rs_LGIT, ps_LGIT = regress(400, 1200)
+
+10
+
+slopes_H, rs_H, ps_H = regress(1000, 2205)
+
+11
+
+slopes_mid_H_pres, rs_mid_H_pres, ps_mid_H_pres = regress(1700,2205)
+
+12
+
+slopes_start_mid_H, rs_start_mid_H, ps_start_mid_H = regress(1100,1700)
+
+regridding
+1
+
+# Rename lat & lon variables so regridder can find them
+
+2
+
+temp_data_xr = temp_data_xr.rename({'TLONG': 'lon', 'TLAT': 'lat'})
+
+3
+
+moc_data_xr = moc_data_xr.rename({'TLONG': 'lon', 'TLAT': 'lat'})
+
+1
+
+# Make 1x1 grid
+
+2
+
+grid_out = xe.util.grid_global(1, 1)
+
+3
+
+​
+
+4
+
+# Make regridder 
+
+5
+
+regridder = xe.Regridder(temp_data_xr, grid_out, 'nearest_s2d',
+
+6
+
+                         reuse_weights=True)
+
+7
+
+lats = regridder(lats_xr)
+
+8
+
+lons = regridder(lons_xr)
+
+9
+
+​
+
+10
+
+def regrid(slopes, rs, ps):
+
+11
+
+    # Regrid 116x100 grids to 180x360 grids
+
+12
+
+    slope_new = regridder(slopes)
+
+13
+
+    r_new = regridder(rs)
+
+14
+
+    p_new = regridder(ps)
+
+15
+
+    
+
+16
+
+    return slope_new, r_new, p_new
+
+Reuse existing file: nearest_s2d_116x100_180x360.nc
+
+1
+
+# Make grids for each time period
+
+2
+
+s_all, r_all, p_all = regrid(slopes_all, rs_all, ps_all )
+
+3
+
+s_YD, r_YD, p_YD = regrid(slopes_YD, rs_YD, ps_YD)
+
+4
+
+s_BA, r_BA, p_BA = regrid(slopes_BA, rs_BA, ps_BA)
+
+5
+
+s_OD, r_OD, p_OD = regrid(slopes_OD, rs_OD, ps_OD)
+
+6
+
+s_8, r_8, p_8 = regrid(slopes_8, rs_8, ps_8)
+
+7
+
+s_H1, r_H1, p_H1 = regrid(slopes_H1, rs_H1, ps_H1 )
+
+8
+
+s_H0, r_H0, p_H0  = regrid(slopes_H0, rs_H0, ps_H0)
+
+9
+
+s_LGIT, r_LGIT, p_LGIT= regrid(slopes_LGIT, rs_LGIT, ps_LGIT)
+
+10
+
+s_H, r_H, p_H = regrid(slopes_H, rs_H, ps_H)
+
+11
+
+s_mid_H_pres, r_mid_H_pres, p_mid_H_pres = regrid(slopes_mid_H_pres, rs_mid_H_pres, ps_mid_H_pres )
+
+12
+
+s_start_mid_H, r_start_mid_H, p_start_mid_H = regrid(slopes_start_mid_H, rs_start_mid_H, ps_start_mid_H)
+
+1
+
+# Significance value
+
+2
+
+​
+
+3
+
+def condit_p(p):
+
+4
+
+    for i in range(p.shape[0]):
+
+5
+
+        for j in range(p.shape[1]):
+
+6
+
+            if p[i][j] < 0.05:
+
+7
+
+                p[i][j] = np.nan
+
+8
+
+    return p
+
+9
+
+​
+
+10
+
+np_all = condit_p(p_all)
+
+11
+
+np_YD = condit_p(p_YD)
+
+12
+
+np_BA = condit_p(p_BA)
+
+13
+
+np_OD = condit_p(p_OD)
+
+14
+
+np_8 = condit_p(p_8)
+
+15
+
+np_H1 = condit_p(p_H1)
+
+16
+
+np_H0 = condit_p(p_H0)
+
+17
+
+np_LGIT = condit_p(p_LGIT)
+
+18
+
+np_H = condit_p(p_H)
+
+19
+
+np_mid_H_pres = condit_p(p_mid_H_pres)
+
+20
+
+np_start_mid_H = condit_p(p_start_mid_H)
+
+[[nan nan nan ... nan nan nan]
+ [nan nan nan ... nan nan nan]
+ [nan nan nan ... nan nan nan]
+ ...
+ [nan nan nan ... nan nan nan]
+ [nan nan nan ... nan nan nan]
+ [nan nan nan ... nan nan nan]]
+
+1
+
+def plot_simple(slope_grid):
+
+2
+
+    fig, ax = plt.subplots(figsize=(9, 7))
+
+3
+
+    plt.contourf(slope_grid, levels=15, extend='both')
+
+4
+
+    cbar = plt.colorbar(orientation="horizontal", pad=0.05)
+
+5
+
+    cbar.set_label('Gradient [\u00b0C/Sv]')
+
+6
+
+    ax.set_aspect('auto')
+
+1
+
+plot_simple(s_all)
+
+cartopy transform
+1
+
+def plot_contour(slope_grid, verbose=True):
+
+2
+
+    plt.figure(figsize=(7,7))
+
+3
+
+    ax = plt.axes(projection=ccrs.PlateCarree(central_longitude=0.0))
+
+4
+
+    ax.add_feature(cfeature.NaturalEarthFeature('physical', 
+
+5
+
+                                                'land', 
+
+6
+
+                                                '110m', # scale(10,50,110)
+
+7
+
+                                                #edgecolor='white',
+
+8
+
+                                                facecolor='white'))
+
+9
+
+    
+
+10
+
+    # or pcolormesh?
+
+11
+
+    base = plt.pcolormesh(lons, lats, slope_grid,
+
+12
+
+                        #levels=15,
+
+13
+
+                        #levels=np.arange(0,.8,0.01),
+
+14
+
+                        #extend='both',
+
+15
+
+                        transform=ccrs.PlateCarree())
+
+16
+
+    
+
+17
+
+    if verbose:
+
+18
+
+        ax.set_extent([-100, 30, 0, 80])
+
+19
+
+    
+
+20
+
+    cbar = plt.colorbar(base, orientation="horizontal", pad=0.05)
+
+21
+
+    cbar.set_label('Gradient [\u00b0C/Sv]')
+
+22
+
+​
+
+23
+
+    ax.set_aspect('auto')
+
+24
+
+    ax.coastlines()
+
+25
+
+    
+
+26
+
+    gl = ax.gridlines(crs=ccrs.PlateCarree(),
+
+27
+
+                      draw_labels=True, 
+
+28
+
+                      alpha=0.0,
+
+29
+
+                      linestyle='--')
+
+30
+
+    gl.xlabels_top=False
+
+31
+
+    gl.ylabels_right=False
+
+32
+
+    gl.xformatter = LONGITUDE_FORMATTER
+
+33
+
+    gl.yformatter = LATITUDE_FORMATTER
+
+1
+
+plot_contour(s_all)
+
+regression (all times)
+1
+
+fig = plt.figure(figsize=(34, 34))
+
+2
+
+​
+
+3
+
+grid_list = [s_YD, s_BA, s_OD, s_H1, s_LGIT, 
+
+4
+
+             s_8, s_H0, s_H, s_mid_H_pres, s_start_mid_H]
+
+5
+
+title_list = ['Younger Dryas', 'Bolling-Allerod', 'Older Dryas', 'Heinrich event 1', 
+
+6
+
+              'Last Glacial-Interglacial Transition', '8ka event', 
+
+7
+
+              'Heinrich event 1', 'Holocene', 'mid-H to pres', 'H-start to mid-H']
+
+8
+
+letter_list = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j']
+
+9
+
+​
+
+10
+
+#grid_listp = [np_YD, np_BA, np_OD, np_H1, np_LGIT, 
+
+11
+
+#             np_8, np_H0, np_H, np_mid_H_pres, np_start_mid_H]
+
+12
+
+​
+
+13
+
+for grid, title, letter, num in zip(grid_list, title_list, letter_list, range(1,11)):
+
+14
+
+    ax = fig.add_subplot(5, 2, num, projection=ccrs.PlateCarree(central_longitude=0.0))
+
+15
+
+    ax.add_feature(cfeature.NaturalEarthFeature('physical', 
+
+16
+
+                                                'land', 
+
+17
+
+                                                '110m', # scale(10,50,110)
+
+18
+
+                                                #edgecolor='white',
+
+19
+
+                                                facecolor='white'))
+
+20
+
+    cm = plt.pcolormesh(lons, lats, grid,
+
+21
+
+                       cmap='RdYlBu_r',
+
+22
+
+                       #extend='both',
+
+23
+
+                       transform=ccrs.PlateCarree(),
+
+24
+
+                       vmin=-0.5, vmax=1)
+
+25
+
+    
+
+26
+
+    #plt.pcolor(lons, lats, np_H1, 
+
+27
+
+    #           hatch='...',
+
+28
+
+    #           alpha=0.)
+
+29
+
+    
+
+30
+
+    ax.set_extent([-100, 30, 0, 80])
+
+31
+
+    plt.title(letter, loc='left', fontweight='bold', fontsize='x-large')
+
+32
+
+    plt.title(title, loc='center', fontsize='x-large')
+
+33
+
+    ax.set_aspect('auto')
+
+34
+
+    ax.coastlines()
+
+35
+
+    
+
+36
+
+    gl = ax.gridlines(crs=ccrs.PlateCarree(),
+
+37
+
+                      draw_labels=True, 
+
+38
+
+                      alpha=0.0,
+
+39
+
+                      linestyle='--')
+
+40
+
+    gl.xlabels_top=False
+
+41
+
+    gl.ylabels_right=False
+
+42
+
+    #gl.xlocator = mticker.FixedLocator([-90, -60, -30, 0, 15])
+
+43
+
+    #gl.ylocator = mticker.FixedLocator([10, 30, 50, 70])
+
+44
+
+    gl.xformatter = LONGITUDE_FORMATTER
+
+45
+
+    gl.yformatter = LATITUDE_FORMATTER
+
+46
+
+    
+
+47
+
+    plt.tight_layout()
+
+48
+
+    plt.subplots_adjust(left=0.2, right=0.5, wspace=0.3, hspace=0.1)
+
+49
+
+    #plt.savefig('/home/ucfarey/DATA/geog0105/Test images/testmap.png', dpi=300)
+
+50
+
+​
+
+51
+
+    cbar = plt.colorbar(cm, orientation="horizontal", pad=0.1)
+
+52
+
+    cbar.set_label('Gradient [\u00b0C/Sv]')
+
+53
+
+​
+
+1
+
+# hatching for significance --> do this as a script at the end
+
+2
+
+​
+
+3
+
+fig = plt.figure(figsize=(10, 10))
+
+4
+
+​
+
+5
+
+ax = fig.add_subplot(1, 1, 1, projection=ccrs.PlateCarree(central_longitude=0.0))
+
+6
+
+ax.add_feature(cfeature.NaturalEarthFeature('physical', 
+
+7
+
+                                            'land', 
+
+8
+
+                                            '110m', # scale(10,50,110)
+
+9
+
+                                            #edgecolor='white',
+
+10
+
+                                            facecolor='white'))
+
+11
+
+cm = plt.pcolormesh(lons, lats, s_BA,
+
+12
+
+                   cmap='RdYlBu_r',
+
+13
+
+                   #extend='both',
+
+14
+
+                   transform=ccrs.PlateCarree(),
+
+15
+
+                   vmin=-0.5, vmax=1)
+
+16
+
+​
+
+17
+
+plt.pcolor(lons, lats, np_BA, 
+
+18
+
+           hatch='...',
+
+19
+
+           alpha=0.)
+
+20
+
+​
+
+21
+
+ax.set_extent([-100, 30, 0, 80])
+
+22
+
+ax.set_aspect('auto')
+
+23
+
+ax.coastlines()
+
+24
+
+​
+
+25
+
+cbar = plt.colorbar(cm, orientation="horizontal", pad=0.1)
+
+26
+
+cbar.set_label('Gradient [\u00b0C/Sv]')
+
+correlation
+1
+
+fig = plt.figure(figsize=(34, 34))
+
+2
+
+​
+
+3
+
+grid_list = [r_YD, r_BA, r_OD, r_H1, r_LGIT, 
+
+4
+
+             r_8, r_H0, r_H, r_mid_H_pres, r_start_mid_H]
+
+5
+
+title_list = ['Younger Dryas', 'Bolling-Allerod', 'Older Dryas', 'Heinrich event 1', 
+
+6
+
+              'Last Glacial-Interglacial Transition', '8ka event', 
+
+7
+
+              'Heinrich event 1', 'Holocene', 'mid-H to pres', 'H-start to mid-H']
+
+8
+
+letter_list = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j']
+
+9
+
+​
+
+10
+
+for grid, title, letter, num in zip(grid_list, title_list, letter_list, range(1,11)):
+
+11
+
+    ax = fig.add_subplot(5, 2, num, projection=ccrs.PlateCarree(central_longitude=0.0))
+
+12
+
+    ax.add_feature(cfeature.NaturalEarthFeature('physical', 
+
+13
+
+                                                'land', 
+
+14
+
+                                                '110m', # scale(10,50,110)
+
+15
+
+                                                #edgecolor='white',
+
+16
+
+                                                facecolor='white'))
+
+17
+
+    plt.pcolormesh(lons, lats, grid,
+
+18
+
+                   cmap='cividis_r',
+
+19
+
+                   #extend='both',
+
+20
+
+                   transform=ccrs.PlateCarree(),
+
+21
+
+                   vmin=-0.8, vmax=1)
+
+22
+
+    
+
+23
+
+    cbar = plt.colorbar(orientation="horizontal", pad=0.1)
+
+24
+
+    cbar.set_label(f"$r^2$")
+
+25
+
+    
+
+26
+
+    ax.set_extent([-100, 30, 0, 80])
+
+27
+
+    plt.title(letter, loc='left', fontweight='bold', fontsize='x-large')
+
+28
+
+    plt.title(title, loc='center', fontsize='x-large')
+
+29
+
+    ax.set_aspect('auto')
+
+30
+
+    ax.coastlines()
+
+31
+
+    
+
+32
+
+    gl = ax.gridlines(crs=ccrs.PlateCarree(),
+
+33
+
+                      draw_labels=True, 
+
+34
+
+                      alpha=0.0,
+
+35
+
+                      linestyle='--')
+
+36
+
+    gl.xlabels_top=False
+
+37
+
+    gl.ylabels_right=False
+
+38
+
+    #gl.xlocator = mticker.FixedLocator([-90, -60, -30, 0, 15])
+
+39
+
+    #gl.ylocator = mticker.FixedLocator([10, 30, 50, 70])
+
+40
+
+    gl.xformatter = LONGITUDE_FORMATTER
+
+41
+
+    gl.yformatter = LATITUDE_FORMATTER
+
+42
+
+    
+
+43
+
+    plt.tight_layout()
+
+44
+
+    plt.subplots_adjust(left=0.2, right=0.5, wspace=0.3, hspace=0.1)
+
+45
+
+    #plt.savefig('/home/ucfarey/DATA/geog0105/Test images/testmap.png', dpi=300)
+
+46
+
+​
+
+p-value
+1
+
+fig = plt.figure(figsize=(34, 34))
+
+2
+
+​
+
+3
+
+grid_list = [p_YD, p_BA, p_OD, p_H1, p_LGIT, 
+
+4
+
+             p_8, p_H0, p_H, p_mid_H_pres, p_start_mid_H]
+
+5
+
+title_list = ['Younger Dryas', 'Bolling-Allerod', 'Older Dryas', 'Heinrich event 1', 
+
+6
+
+              'Last Glacial-Interglacial Transition', '8ka event', 
+
+7
+
+              'Heinrich event 1', 'Holocene', 'mid-H to pres', 'H-start to mid-H']
+
+8
+
+letter_list = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j']
+
+9
+
+​
+
+10
+
+for grid, title, letter, num in zip(grid_list, title_list, letter_list, range(1,11)):
+
+11
+
+    ax = fig.add_subplot(5, 2, num, projection=ccrs.PlateCarree(central_longitude=0.0))
+
+12
+
+    ax.add_feature(cfeature.NaturalEarthFeature('physical', 
+
+13
+
+                                                'land', 
+
+14
+
+                                                '110m', # scale
+
+15
+
+                                                facecolor='white'))
+
+16
+
+    plt.pcolormesh(lons, lats, grid,
+
+17
+
+                   cmap='plasma',
+
+18
+
+                   transform=ccrs.PlateCarree())
+
+19
+
+    
+
+20
+
+    cbar = plt.colorbar(orientation="horizontal", pad=0.1)
+
+21
+
+    cbar.set_label('p-value')
+
+22
+
+    
+
+23
+
+    ax.set_extent([-100, 30, 0, 80])
+
+24
+
+    plt.title(letter, loc='left', fontweight='bold', fontsize='x-large')
+
+25
+
+    plt.title(title, loc='center', fontsize='x-large')
+
+26
+
+    ax.set_aspect('auto')
+
+27
+
+    ax.coastlines()
+
+28
+
+    
+
+29
+
+    gl = ax.gridlines(crs=ccrs.PlateCarree(),
+
+30
+
+                      draw_labels=True, 
+
+31
+
+                      alpha=0.0,
+
+32
+
+                      linestyle='--')
+
+33
+
+    gl.xlabels_top=False
+
+34
+
+    gl.ylabels_right=False
+
+35
+
+    #gl.xlocator = mticker.FixedLocator([-90, -60, -30, 0, 15])
+
+36
+
+    #gl.ylocator = mticker.FixedLocator([10, 30, 50, 70])
+
+37
+
+    gl.xformatter = LONGITUDE_FORMATTER
+
+38
+
+    gl.yformatter = LATITUDE_FORMATTER
+
+39
+
+    
+
+40
+
+    plt.tight_layout()
+
+41
+
+    plt.subplots_adjust(left=0.2, right=0.5, wspace=0.3, hspace=0.1)
+
+42
+
+    #plt.savefig('/home/ucfarey/DATA/geog0105/Test images/testmap.png', dpi=300)
+
+43
+
+​
+
+
+Jupyter Notebook
+Dissertation 16-05-19 regression (autosaved) Current Kernel Logo
+
+Python 3
+
+    File
+    Edit
+    View
+    Insert
+    Cell
+    Kernel
+    Widgets
+    Help
+
+1
+
+from netCDF4 import Dataset
+
+2
+
+import numpy as np
+
+3
+
+import matplotlib.pyplot as plt
+
+4
+
+%matplotlib inline
+
+5
+
+import xarray as xr
+
+6
+
+import cartopy.crs as ccrs
+
+7
+
+from scipy import stats
+
+8
+
+from scipy import signal
+
+9
+
+from decimal import Decimal
+
+10
+
+​
+
+11
+
+# Import MOC (decadally averaged) data
+
+12
+
+moc_data = Dataset('/home/ucfarey/DATA/geog0105/' +
+
+13
+
+                   'trace.01-36.22000BP.pop.MOC.22000BP_decavg_400BCE.nc')
+
+14
+
+​
+
+15
+
+temp_data = Dataset('/home/ucfarey/DATA/geog0105/' +
+
+16
+
+                   'trace.01-36.22000BP.pop.TEMP.22000BP_decavg_400BCE.nc')
+
+1
+
+# VARIABLES
+
+2
+
+​
+
+3
+
+time_var = temp_data.variables['time']
+
+4
+
+# North of 30 deg & >500 mm, transport region = NA
+
+5
+
+moc_var = np.amax(moc_data.variables['MOC'][:, 1, 0, 14:, 73:], axis=(1,2))
+
+1
+
+def find_temp_coords(min_lat, max_lat, min_lon, max_lon):
+
+2
+
+    
+
+3
+
+    '''
+
+4
+
+    Damian's code
+
+5
+
+    
+
+6
+
+    Parameters
+
+7
+
+    -----------
+
+8
+
+    
+
+9
+
+    min_lat: minimum latitude (degrees N)
+
+10
+
+    max_lat: maximum latitude (degrees N)
+
+11
+
+    min_lon: minimum longitude (degrees E)
+
+12
+
+    max_lon: maximum longitude (degrees E)
+
+13
+
+        
+
+14
+
+    Returns
+
+15
+
+    -------
+
+16
+
+    
+
+17
+
+    mean_temp: the average of temperatures in a specific lat-lon region
+
+18
+
+    for all depths & for all times
+
+19
+
+    
+
+20
+
+    '''
+
+21
+
+    
+
+22
+
+    # min lat, max lat, min lon, max lon.
+
+23
+
+    area = [min_lat, max_lat, min_lon, max_lon]  
+
+24
+
+​
+
+25
+
+    lat = temp_data.variables['TLAT'][:]
+
+26
+
+    lon = temp_data.variables['TLONG'][:]
+
+27
+
+    var = temp_data.variables['TEMP'][:]
+
+28
+
+​
+
+29
+
+    # Physical coordinates
+
+30
+
+    ll = [lat,lon]
+
+31
+
+    # Logical coordinates
+
+32
+
+    nn = ['nlat','nlon']
+
+33
+
+    
+
+34
+
+    # Specify area of interest as lat-lon degrees
+
+35
+
+    # Produces boolean array (shape 116, 100)
+
+36
+
+    latt = np.logical_and(lat >= area[0], lat <= area[1])
+
+37
+
+    lonn = np.logical_and(lon >= area[2], lon <= area[3])
+
+38
+
+​
+
+39
+
+    # Select area of interest from combination of lat-lon arrays
+
+40
+
+    # Produces boolean array (shape 116, 100)
+
+41
+
+    a_int = latt * lonn 
+
+42
+
+    print("Shape of a_int: ", a_int.shape)
+
+43
+
+​
+
+44
+
+    # Indices for area of interest
+
+45
+
+    # nonzero returns indices of elements that are non-zero (True)
+
+46
+
+    # Shape = (20,) (20,)
+
+47
+
+    (ii,jj) = a_int.nonzero()
+
+48
+
+​
+
+49
+
+    # Apply indices to select variable data
+
+50
+
+    # var_ai = temp over area of interest, all times, all depths
+
+51
+
+    var_ai = var[:, :, ii.min():ii.max(),jj.min():jj.max()] \
+
+52
+
+             *a_int[ii.min():ii.max(),jj.min():jj.max()]
+
+53
+
+    print("Shape of var_ai: ", var_ai.shape)
+
+54
+
+    
+
+55
+
+    # Boolean array, temp*AOI, temp over AOI only  
+
+56
+
+    vvv = [a_int, var[0,0,:,:]*a_int, var_ai[0,0,:,:]]
+
+57
+
+    
+
+58
+
+    fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(10, 2))
+
+59
+
+    for vv,ax in zip(vvv,axes.flat):
+
+60
+
+        im = ax.imshow(vv, origin=(20,10))
+
+61
+
+    cbar = fig.colorbar(im)
+
+62
+
+    cbar.set_label('Potential T (\u00b0C)')
+
+63
+
+    plt.rcParams.update({'font.size': 10})
+
+64
+
+    ax.set_aspect('auto')
+
+65
+
+​
+
+66
+
+    # MY CODE - Take mean of temperature over axes 2-3 (area)
+
+67
+
+    mean_temp = var_ai.mean(axis=tuple(range(2,4)))
+
+68
+
+    print("Shape of mean_temp: ", mean_temp.shape)
+
+69
+
+​
+
+70
+
+    return mean_temp
+
+71
+
+    
+
+72
+
+mean_temp = find_temp_coords(0,60,280,350)    
+
+Shape of a_int:  (116, 100)
+Shape of var_ai:  (2204, 25, 46, 99)
+Shape of mean_temp:  (2204, 25)
+
+1
+
+def plot_temp(mean_temp, min_time, max_time):
+
+2
+
+    
+
+3
+
+    '''
+
+4
+
+    
+
+5
+
+    Parameters
+
+6
+
+    -----------
+
+7
+
+    
+
+8
+
+    mean_temp: an array of temperatures
+
+9
+
+    depth: the index of depth in the TEMP variable
+
+10
+
+    min_time: the index for the minimum time in the TEMP variable
+
+11
+
+    max_time: the index for the maximum time in the TEMP variable
+
+12
+
+       
+
+13
+
+    Returns
+
+14
+
+    -------
+
+15
+
+    x: array of time
+
+16
+
+    y: array of temperatures 
+
+17
+
+    
+
+18
+
+    '''
+
+19
+
+    
+
+20
+
+    im, ax = plt.subplots(figsize=(10,5))
+
+21
+
+    
+
+22
+
+    time = time_var[min_time:max_time]
+
+23
+
+    temp = mean_temp[:,0][min_time:max_time]
+
+24
+
+    print(time.shape, temp.shape)
+
+25
+
+    
+
+26
+
+    plt.plot(time,temp)
+
+27
+
+    plt.xlabel('Time [ka BP]')
+
+28
+
+    plt.ylabel('Potential temperature [\u00b0C]')
+
+29
+
+    plt.rcParams.update({'font.size': 10})
+
+30
+
+    
+
+31
+
+    return temp, time
+
+32
+
+​
+
+33
+
+# lat-lon grid, depth (index)
+
+34
+
+temp_mean, time = plot_temp(mean_temp, 0, 2205)
+
+(2204,) (2204,)
+
+1
+
+def plot_moc(min_time, max_time):
+
+2
+
+    
+
+3
+
+    '''
+
+4
+
+    
+
+5
+
+    Parameters
+
+6
+
+    -----------
+
+7
+
+    
+
+8
+
+    min_time: the value for the minimum time (-k yrs)
+
+9
+
+    max_time: the value for the maximum time (-k yrs)
+
+10
+
+    transport_reg: global (0) or N Atlantic (1)
+
+11
+
+    lat: latitude (degrees N)
+
+12
+
+        
+
+13
+
+    Returns
+
+14
+
+    -------
+
+15
+
+    
+
+16
+
+    moc_time: array of MOC for a specific time period, transport region,
+
+17
+
+    averaged over depths >500 m, for a specific latitude 
+
+18
+
+    
+
+19
+
+    '''
+
+20
+
+    
+
+21
+
+    time = time_var[min_time:max_time]
+
+22
+
+    moc_max = moc_var[min_time:max_time]
+
+23
+
+    print(time.shape, moc_max.shape)
+
+24
+
+    
+
+25
+
+    fig, ax = plt.subplots(figsize=(10,5))
+
+26
+
+    plt.plot(time, moc_max, color='r')
+
+27
+
+    plt.xlabel('Time [ka BP]')
+
+28
+
+    plt.ylabel('MOC [Sv]')
+
+29
+
+    plt.rcParams.update({'font.size': 10})
+
+30
+
+    
+
+31
+
+    return moc_max
+
+32
+
+    
+
+33
+
+moc = plot_moc(0, 2205)    
+
+(2204,) (2204,)
+
+1
+
+def plot_temp_moc(time, temp, moc):
+
+2
+
+    fig, ax1 = plt.subplots(figsize=(10,5))
+
+3
+
+    
+
+4
+
+    color1= 'tab:orange'
+
+5
+
+    color2= 'tab:cyan'
+
+6
+
+    
+
+7
+
+    ax1.set_xlabel('Time [ka BP]')
+
+8
+
+    ax1.set_ylabel('Potential temperature [\u00b0C]',color=color1)
+
+9
+
+    ax1.plot(time, temp, color=color1)
+
+10
+
+    ax1.tick_params(axis='y', labelcolor=color1)
+
+11
+
+    
+
+12
+
+    ax2 = ax1.twinx()
+
+13
+
+    ax2.set_ylabel('MOC [Sv]', color=color2)
+
+14
+
+    ax2.plot(time, moc, color=color2)
+
+15
+
+    ax2.tick_params(axis='y', labelcolor=color2)
+
+16
+
+    
+
+17
+
+    #fig.tight_layout()
+
+18
+
+    plt.rcParams.update({'font.size': 10})
+
+19
+
+    
+
+20
+
+temp_moc = plot_temp_moc(time, temp_mean, moc)
+
+1
+
+time_all = time_var[0:2205]
+
+2
+
+time_YD = time_var[900:1150]
+
+3
+
+time_BA = time_var[700:1000]
+
+4
+
+time_OD = time_var[0:700]
+
+5
+
+time_8 = time_var[1300:1500]
+
+6
+
+time_H1 = time_var[400:700]
+
+7
+
+time_H0 = time_var[900:1200]
+
+8
+
+time_LGIT = time_var[400:1200]
+
+9
+
+time_H = time_var[1000:2205]
+
+10
+
+time_mid_H_pres = time_var[1700:2205]
+
+11
+
+time_start_mid_H = time_var[1100:1700]
+
+12
+
+​
+
+13
+
+temp_all = mean_temp[0:2205,0]
+
+14
+
+temp_YD = mean_temp[900:1150,0]
+
+15
+
+temp_BA = mean_temp[700:1000,0]
+
+16
+
+temp_OD = mean_temp[0:700,0]
+
+17
+
+temp_8 = mean_temp[1300:1500,0]
+
+18
+
+temp_H1 = mean_temp[400:700,0]
+
+19
+
+temp_H0 = mean_temp[900:1200,0]
+
+20
+
+temp_LGIT = mean_temp[400:1200,0]
+
+21
+
+temp_H = mean_temp[1000:2205,0]
+
+22
+
+temp_mid_H_pres = mean_temp[1700:2205,0]
+
+23
+
+temp_start_mid_H = mean_temp[1100:1700,0]
+
+24
+
+​
+
+25
+
+moc_all = moc[0:2205]
+
+26
+
+moc_YD = moc[900:1150]
+
+27
+
+moc_BA = moc[700:1000]
+
+28
+
+moc_OD = moc[0:700]
+
+29
+
+moc_8 = moc[1300:1500]
+
+30
+
+moc_H1 = moc[400:700]
+
+31
+
+moc_H0 = moc[900:1200]
+
+32
+
+moc_LGIT = moc[400:1200]
+
+33
+
+moc_H = moc[1000:2205]
+
+34
+
+moc_mid_H_pres = moc[1700:2205]
+
+35
+
+moc_start_mid_H = moc[1100:1700]
+
+36
+
+​
+
+37
+
+temp_list = [temp_8, temp_H0, temp_H, temp_mid_H_pres, temp_start_mid_H, 
+
+38
+
+             temp_OD, temp_H1, temp_BA, temp_YD, temp_LGIT]
+
+39
+
+moc_list = [moc_8, moc_H0, moc_H, moc_mid_H_pres, moc_start_mid_H, 
+
+40
+
+           moc_OD, moc_H1, moc_BA, moc_YD, moc_LGIT]
+
+41
+
+time_list = [time_8, time_H0, time_H, time_mid_H_pres, time_start_mid_H,
+
+42
+
+            time_OD, time_H1, time_BA, time_YD, time_LGIT]
+
+43
+
+title_list = ['8ka event', 'H0', 'Holocene', 'mid-H to pres', 'start-H to mid-H',
+
+44
+
+              'OD', 'H1', 'BA', 'YD', 'LGIT']
+
+45
+
+letter_list = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j']
+
+1
+
+fig = plt.figure(figsize=(24, 34))
+
+2
+
+​
+
+3
+
+color1= '#B22222'
+
+4
+
+color2= '#4169E1'
+
+5
+
+​
+
+6
+
+for temp, moc, time, title, letter, num in zip(temp_list, 
+
+7
+
+                                               moc_list, 
+
+8
+
+                                               time_list, 
+
+9
+
+                                               title_list,
+
+10
+
+                                               letter_list,
+
+11
+
+                                               range(1,11)):
+
+12
+
+​
+
+13
+
+    ax1 = fig.add_subplot(5, 2, num)
+
+14
+
+    
+
+15
+
+    ax1.plot(time, temp, color=color1)
+
+16
+
+    ax1.set_xlabel('Time [ka BP]')
+
+17
+
+    ax1.set_ylabel('Potential temperature [\u00b0C]',color=color1)
+
+18
+
+​
+
+19
+
+    ax1.tick_params(axis='y', labelcolor=color1)
+
+20
+
+​
+
+21
+
+    ax2 = ax1.twinx()
+
+22
+
+    ax2.set_ylabel('MOC [Sv]', color=color2)
+
+23
+
+    ax2.plot(time, moc, color=color2)
+
+24
+
+    ax2.tick_params(axis='y', labelcolor=color2)
+
+25
+
+    
+
+26
+
+    plt.title(letter, loc='left', fontweight='bold', fontsize='x-large')
+
+27
+
+    plt.title(title, loc='center', fontsize='x-large')
+
+28
+
+    fig.tight_layout()
+
+29
+
+    plt.subplots_adjust(hspace=0.5, wspace=0.2)
+
+30
+
+    plt.rcParams.update({'font.size': 20})
+
+low-pass filter
+1
+
+def low_high_filter(order, crit_freq, filter_name, moc):
+
+2
+
+    
+
+3
+
+    '''
+
+4
+
+    Designs an Nth-order digital or analog Butterworth filter & plots
+
+5
+
+    the new signal. Returns sos (second-order sections representation
+
+6
+
+    of the filter)
+
+7
+
+    
+
+8
+
+    Parameters
+
+9
+
+    -----------
+
+10
+
+    
+
+11
+
+    order: order of the filter.
+
+12
+
+    crit_freq: cutoff frequency, specified as a scalar between 0 and 1 
+
+13
+
+    for digital filters. The cutoff frequency is the frequency at which 
+
+14
+
+    the magnitude response of the filter is 1 / √2.
+
+15
+
+    filter_name: hp or lp.
+
+16
+
+    
+
+17
+
+    Returns
+
+18
+
+    -------
+
+19
+
+    
+
+20
+
+    filtered: 
+
+21
+
+    
+
+22
+
+    '''
+
+23
+
+    
+
+24
+
+    sos = signal.butter(order, crit_freq, filter_name, output='sos')
+
+25
+
+    filtered = signal.sosfilt(sos, moc)
+
+26
+
+        
+
+27
+
+    return filtered
+
+1
+
+fig = plt.figure(figsize=(24, 34))
+
+2
+
+​
+
+3
+
+for moc, time, title, letter, num in zip(moc_list, 
+
+4
+
+                                         time_list, 
+
+5
+
+                                         title_list,
+
+6
+
+                                         letter_list,
+
+7
+
+                                         range(1,11)):
+
+8
+
+    ax = fig.add_subplot(5, 2, num)
+
+9
+
+    low_filter = low_high_filter(5, 0.1, 'lp', moc)
+
+10
+
+    ax.plot(time, low_filter, linewidth=4)
+
+11
+
+    ax.plot(time, moc, color='gray', alpha=0.6)
+
+12
+
+​
+
+13
+
+    ax.set_xlabel('Time [ka BP]')
+
+14
+
+    ax.set_ylabel('MOC [Sv]')
+
+15
+
+    plt.title(letter, loc='left', fontweight='bold', fontsize='x-large')
+
+16
+
+    plt.title(title, loc='center', fontsize='x-large')
+
+17
+
+    fig.tight_layout()
+
+18
+
+    plt.subplots_adjust(hspace=0.5, wspace=0.2)
+
+19
+
+    plt.rcParams.update({'font.size': 20})
+
+high-pass filter
+1
+
+fig = plt.figure(figsize=(24, 34))
+
+2
+
+​
+
+3
+
+for moc, time, title, letter, num in zip(moc_list, 
+
+4
+
+                                         time_list, 
+
+5
+
+                                         title_list,
+
+6
+
+                                         letter_list,
+
+7
+
+                                         range(1,11)):
+
+8
+
+    ax = fig.add_subplot(5, 2, num)
+
+9
+
+    high_filter = low_high_filter(5, 0.05, 'hp', moc)
+
+10
+
+    ax.plot(time, high_filter, linewidth=4)
+
+11
+
+    ax.plot(time, moc, color='gray', alpha=0.6)
+
+12
+
+​
+
+13
+
+    ax.set_xlabel('Time [ka BP]')
+
+14
+
+    ax.set_ylabel('MOC [Sv]')
+
+15
+
+    plt.title(letter, loc='left', fontweight='bold', fontsize='x-large')
+
+16
+
+    plt.title(title, loc='center', fontsize='x-large')
+
+17
+
+    fig.tight_layout()
+
+18
+
+    plt.subplots_adjust(hspace=0.5, wspace=0.2)
+
+19
+
+    plt.rcParams.update({'font.size': 20})
+
+regression
+1
+
+def regression(moc, temp, title, letter, num):
+
+2
+
+    
+
+3
+
+    ax = fig.add_subplot(5, 2, num)
+
+4
+
+    slope, intercept, r_value, p_value, std_err = stats.linregress(moc,temp)
+
+5
+
+​
+
+6
+
+    plt.scatter(moc, temp, color='k')
+
+7
+
+    plt.plot(moc, intercept + slope*moc, 
+
+8
+
+             color='red', label = f"$r^2=%.2f$, p=%.2E"%(r_value**2, Decimal(p_value)))
+
+9
+
+​
+
+10
+
+    plt.legend(loc='best')
+
+11
+
+    plt.xlabel('MOC [Sv]')
+
+12
+
+    plt.ylabel('Temperature [\u00b0C]')
+
+13
+
+​
+
+14
+
+    plt.title(letter, loc='left', fontweight='bold', fontsize='x-large')
+
+15
+
+    plt.title(title, loc='center', fontsize='x-large')
+
+16
+
+    fig.tight_layout()
+
+17
+
+    plt.subplots_adjust(wspace=0.2, hspace=0.4)
+
+18
+
+    plt.rcParams.update({'font.size': 20})
+
+1
+
+fig = plt.figure(figsize=(24, 34))        
+
+2
+
+for temp, moc, title, letter, num in zip(temp_list, 
+
+3
+
+                                         moc_list, 
+
+4
+
+                                         title_list,
+
+5
+
+                                         letter_list,
+
+6
+
+                                         range(1,11)):
+
+7
+
+​
+
+8
+
+    regression(moc, temp, title, letter, num)
+
+regression (low-pass)
+1
+
+fig = plt.figure(figsize=(24, 34))
+
+2
+
+for temp, moc, title, letter, num in zip(temp_list, 
+
+3
+
+                                         moc_list, 
+
+4
+
+                                         title_list,
+
+5
+
+                                         letter_list,
+
+6
+
+                                         range(1,11)):
+
+7
+
+ 
+
+8
+
+    low_filter = low_high_filter(5, 0.1, 'lp', moc)
+
+9
+
+    regression(low_filter, temp, title, letter, num)
+
+regression (high-pass)
+1
+
+fig = plt.figure(figsize=(24, 34))
+
+2
+
+for temp, moc, title, letter, num in zip(temp_list, 
+
+3
+
+                                         moc_list, 
+
+4
+
+                                         title_list,
+
+5
+
+                                         letter_list,
+
+6
+
+                                         range(1,11)):
+
+7
+
+ 
+
+8
+
+    high_filter = low_high_filter(5, 0.05, 'hp', moc)
+
+9
+
+    regression(high_filter, temp, title, letter, num)
+
+autocorrelation
+1
+
+plt.acorr(moc_var, maxlags=50)
+
+2
+
+plt.title('Autocorrelation of MOC array')
+
+3
+
+plt.xlabel('lag')
+
+4
+
+plt.ylabel('Autocorrelation')
+
+5
+
+​
+
+6
+
+#-----calculate lag-one autocorrelation (r1) 
+
+7
+
+x1=moc_all[1:-1]
+
+8
+
+y1=moc_all[2:]
+
+9
+
+# corrcoef returns Pearson product-moment correlation coefficients 
+
+10
+
+r1 = np.corrcoef(x1, y1)[0,1]
+
+11
+
+print('lag-1 autocorrelation: ', r1)
+
+12
+
+​
+
+13
+
+#-----estimate equivalent N
+
+14
+
+N = 2205 # length of time series?
+
+15
+
+Neqv = N*((1-r1)/(1+r1))
+
+16
+
+print(Neqv)
+
+17
+
+​
+
+18
+
+#-----estimate equivalent DOF 
+
+19
+
+df = Neqv-2
+
+20
+
+print(df)
+
+lag-1 autocorrelation:  0.9797104440903658
+22.59849207458205
+20.59849207458205
+
+1
+
+# ---- State H0 & H1
+
+2
+
+# H0 = variance(MOC) = variance(TEMP)
+
+3
+
+# H1 = variance(MOC) is statistically significantly different to variance(TEMP)
+
+4
+
+​
+
+5
+
+# If F-calc is far greater than 1.0, the samples are drawn from populations
+
+6
+
+# with very different means
+
+7
+
+​
+
+8
+
+dfn = 6.1592135602428915
+
+9
+
+dfd = 2.462239508424017
+
+10
+
+​
+
+11
+
+# ---- Variance of temp & moc                                              DOF???
+
+12
+
+print('Variance moc={0:.3f}, Variance temp={1:.3f}'.format(np.var(moc_OD, ddof=dfn), np.var(temp_OD, ddof=dfd)))
+
+13
+
+fcalc = np.var(moc_OD, ddof=dfn)/np.var(temp_OD, ddof=dfd) # DOF?
+
+14
+
+print('Fcalc=', fcalc)
+
+15
+
+​
+
+16
+
+alpha = 0.05
+
+17
+
+p_value = stats.f.sf(F, dfn, dfd)
+
+18
+
+if p_value < alpha or p_value > (1-alpha):
+
+19
+
+    print('Reject H0', p_value)
+
+20
+
+else:
+
+21
+
+    print("Can't reject H0", p_value)
+
+Variance moc=15.872, Variance temp=0.016
+Fcalc= 986.2460785843773
+
+---------------------------------------------------------------------------
+NameError                                 Traceback (most recent call last)
+<ipython-input-12-634ac7bfbfaf> in <module>
+     15 
+     16 alpha = 0.05
+---> 17 p_value = stats.f.sf(F, dfn, dfd)
+     18 if p_value < alpha or p_value > (1-alpha):
+     19     print('Reject H0', p_value)
+
+NameError: name 'F' is not defined
+
+1
+
+# t-test
+
+2
+
+​
+
+3
+
+var_a = moc_OD.var(ddof=6.1592135602428915)
+
+4
+
+var_b = temp_OD.var(ddof=2.462239508424017)
+
+5
+
+​
+
+6
+
+N=700 # sample size
+
+7
+
+​
+
+8
+
+#std deviation
+
+9
+
+s = np.sqrt((var_a + var_b)/2)
+
+10
+
+​
+
+11
+
+# Calculate the t-statistics
+
+12
+
+t = (moc_OD.mean() - temp_OD.mean())/(s*np.sqrt(2/N))
+
+13
+
+​
+
+14
+
+## Compare with the critical t-value
+
+15
+
+#Degrees of freedom
+
+16
+
+df = (2*N) - 2
+
+17
+
+​
+
+18
+
+#p-value after comparison with the t 
+
+19
+
+p = 1 - stats.t.cdf(t,df=df)
+
+20
+
+​
+
+21
+
+print("t = " + str(t))
+
+22
+
+print("p = " + str(2*p))
+
+23
+
+### You can see that after comparing the t statistic with the critical t value (computed internally) we get a good p value of 0.0005 and thus we reject the null hypothesis and thus it proves that the mean of the two distributions are different and statistically significant.
+
+24
+
+​
+
+25
+
+## Cross Checking with the internal scipy function
+
+26
+
+t2, p2 = t = stats.ttest_ind(moc_OD, temp_OD, equal_var=False)
+
+27
+
+print("t = " + str(t2))
+
+28
+
+print("p = " + str(p2))
+
+29
+
+​
+
+30
+
+# t score of 3 means that groups are 3x as different from
+
+31
+
+# each other as they are within each other
+
+32
+
+# large t-score tells you that groups are different
+
+1
+
+'''
+
+2
+
+2) Calculate F value:
+
+3
+
+F = (SSE1 – SSE2 / m) / (SSE2/n-k)
+
+4
+
+SSE = residual sum of squares
+
+5
+
+m = number of restrictions
+
+6
+
+k = number of independent variables
+
+7
+
+​
+
+8
+
+3) Find the F Statistic (the critical value for this test)
+
+9
+
+F Statistic = variation between sample means / variations within the samples
+
+10
+
+You can find the F Statistic in the F-Table.
+
+11
+
+​
+
+12
+
+4) Reject H0 or H1
+
+13
+
+​
+
+14
+
+'''
+
+streamfunction
+1
+
+def contour_plot(time, transport_reg, n_lon):
+
+2
+
+   
+
+3
+
+    # MOC: time, transport_reg, moc_comp, moc_z, lat_aux_grid
+
+4
+
+    moc_sf = moc_data.variables['MOC'][time, transport_reg, 0, :, :]
+
+5
+
+    lats = moc_data.variables['lat_aux_grid'][:]
+
+6
+
+    depths = moc_data.variables['moc_z'][:]/100     # change to m
+
+7
+
+    # Make x & y same size as z
+
+8
+
+    x, y = np.meshgrid(lats, depths)
+
+9
+
+    
+
+10
+
+    # TEMP: time, z_t, nlat, nlon
+
+11
+
+    temp_sf = temp_data.variables['TEMP'][time, :, :, n_lon]
+
+12
+
+    lats1 = temp_data.variables['TLAT'][:,0]
+
+13
+
+    depths1 = temp_data.variables['z_t'][:]/100    
+
+14
+
+    x1, y1, = np.meshgrid(lats1, depths1)
+
+15
+
+    
+
+16
+
+    fig, (ax1, ax2) = plt.subplots(ncols=2, figsize=(13,4))
+
+17
+
+    
+
+18
+
+    im1 = ax1.imshow(moc_sf)
+
+19
+
+    ax1.contourf(x, y, moc_sf)
+
+20
+
+    cbar1 = fig.colorbar(im1, ax=ax1)
+
+21
+
+    cbar1.set_label('MOC (Sv)')
+
+22
+
+    ax1.set_xlabel('Latitude [deg N]')
+
+23
+
+    ax1.set_ylabel('Depth[m]')
+
+24
+
+    ax1.set_xlim(xmax=90, xmin=-30)
+
+25
+
+    ax1.set_aspect('auto')
+
+26
+
+    
+
+27
+
+    im2 = ax2.imshow(temp_sf)
+
+28
+
+    ax2.contourf(x1, y1, temp_sf)
+
+29
+
+    cbar2 = fig.colorbar(im2, ax=ax2)
+
+30
+
+    cbar2.set_label('Potential T (\u00b0C)')
+
+31
+
+    ax2.set_xlabel('Latitude [deg N]')
+
+32
+
+    ax2.set_ylabel('Depth[m]')
+
+33
+
+    ax2.set_xlim(xmax=70)
+
+34
+
+    ax2.set_aspect('auto')
+
+35
+
+    
+
+36
+
+    fig.tight_layout()
+
+37
+
+​
+
+38
+
+contour_plot(1, 1, 1)
+
+1
+
+moc_sf2 = moc_data.variables['MOC'][:, 1, 0, :, :]
+
+2
+
+lats = moc_data.variables['lat_aux_grid'][:]
+
+3
+
+depths = moc_data.variables['moc_z'][:]/100     # change to m
+
+4
+
+# Make x & y same size as z
+
+5
+
+x, y = np.meshgrid(lats, depths)
+
+6
+
+​
+
+7
+
+moc_YDsf = np.amax(moc_sf2[900:1150, :, :], axis=0)
+
+8
+
+moc_BAsf = np.amax(moc_sf2[700:1000, :, :], axis=0)
+
+9
+
+moc_ODsf = np.amax(moc_sf2[0:700, :, :], axis=0)
+
+10
+
+moc_8sf = np.amax(moc_sf2[1300:1500, :, :], axis=0)
+
+11
+
+moc_H1sf = np.amax(moc_sf2[400:700, :, :], axis=0)
+
+12
+
+moc_H0sf = np.amax(moc_sf2[900:1200, :, :], axis=0)
+
+13
+
+moc_LGITsf = np.amax(moc_sf2[400:1200, :, :], axis=0)
+
+14
+
+moc_Hsf = np.amax(moc_sf2[1000:2205, :, :], axis=0)
+
+15
+
+moc_mid_H_pressf = np.amax(moc_sf2[1700:2205, :, :], axis=0)
+
+16
+
+moc_start_mid_Hsf = np.amax(moc_sf2[1100:1700, :, :], axis=0)
+
+17
+
+​
+
+18
+
+moc_list = [moc_8sf, moc_H0sf, moc_Hsf, moc_mid_H_pressf, moc_start_mid_Hsf, 
+
+19
+
+           moc_ODsf, moc_H1sf, moc_BAsf, moc_YDsf, moc_LGITsf]
+
+20
+
+title_list = ['8ka event', 'H0', 'Holocene', 'mid-H to pres', 'start-H to mid-H',
+
+21
+
+              'OD', 'H1', 'BA', 'YD', 'LGIT']
+
+22
+
+letter_list = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j']
+
+23
+
+​
+
+24
+
+fig = plt.figure(figsize=(20, 34))
+
+25
+
+​
+
+26
+
+for moc, title, letter, num in zip(moc_list, 
+
+27
+
+                                   title_list,
+
+28
+
+                                   letter_list,
+
+29
+
+                                   range(1,11)):
+
+30
+
+    
+
+31
+
+    ax = fig.add_subplot(5, 2, num)   
+
+32
+
+    #im = ax.imshow(moc)
+
+33
+
+    ax.contourf(x, y, moc)
+
+34
+
+    
+
+35
+
+    #cbar = fig.colorbar(im, ax=ax)
+
+36
+
+    #cbar.set_label('MOC [Sv]')
+
+37
+
+    
+
+38
+
+    ax.set_xlabel('Latitude [\u00b0N]')
+
+39
+
+    ax.set_ylabel('Depth[m]')
+
+40
+
+    
+
+41
+
+    ax.set_xlim(xmax=90, xmin=-30)
+
+42
+
+    plt.gca().invert_yaxis()
+
+43
+
+    ax.set_aspect('auto')
+
+44
+
+    plt.title(letter, loc='left', fontweight='bold', fontsize='x-large')
+
+45
+
+    plt.title(title, loc='center', fontsize='x-large')
+
+46
+
+    
+
+47
+
+    fig.tight_layout()
+
+48
+
+    plt.subplots_adjust(wspace=0.2, hspace=0.4)
+
+49
+
+    plt.rcParams.update({'font.size': 20})
+
+50
+
+    
+
+
+
